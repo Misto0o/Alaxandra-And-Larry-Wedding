@@ -122,8 +122,8 @@ uploadBtn.addEventListener('click', async () => {
 
         try {
             const blob = await compressImage(file);
-            const path = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-
+            const userId = session.user.id;
+            const path = `${userId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
             const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
                 contentType: 'image/jpeg',
                 upsert: false,
@@ -158,33 +158,58 @@ let visibleCount = 1;
 
 async function loadGallery() {
     try {
-        const { data, error } = await supabase.storage.from(BUCKET).list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } });
-        if (error) throw error;
-        if (!data || !data.length) return;
+        const userId = session.user.id;
 
-        const files = data.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
+        // List all top-level folders
+        const { data: folders, error } = await supabase.storage.from(BUCKET).list('', { limit: 200 });
+        if (error) throw error;
+        if (!folders || !folders.length) return;
+
+        // Collect files from all user folders
+        const allFiles = [];
+        for (const folder of folders) {
+            if (!folder.id) { // it's a folder, not a loose file
+                const { data: folderFiles } = await supabase.storage.from(BUCKET).list(folder.name, {
+                    limit: 200,
+                    sortBy: { column: 'created_at', order: 'desc' }
+                });
+                if (folderFiles) {
+                    folderFiles.forEach(f => allFiles.push({ ...f, folder: folder.name }));
+                }
+            }
+        }
+
+        const files = allFiles.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
+        if (!files.length) return;
+
         track.innerHTML = '';
 
         for (let i = 0; i < files.length; i++) {
-            const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(files[i].name);
+            const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(`${files[i].folder}/${files[i].name}`);
+
             const slide = document.createElement('div');
             slide.className = 'sushi-slide';
 
             const img = document.createElement('img');
             img.src = urlData.publicUrl;
             img.loading = 'lazy';
-            // Use the file name (without timestamp/prefix) as alt text
             const nameParts = files[i].name.split('_');
             img.alt = nameParts.slice(1).join('_') || 'Uploaded photo';
             slide.appendChild(img);
 
-            const delBtn = document.createElement('button');
-            delBtn.textContent = 'Delete';
-            delBtn.onclick = async () => {
-                await supabase.storage.from(BUCKET).remove([files[i].name]);
-                loadGallery();
-            };
-            slide.appendChild(delBtn);
+            // Only show delete button for the current user's own photos
+            if (files[i].folder === userId) {
+                const delBtn = document.createElement('button');
+                delBtn.textContent = '✕';
+                delBtn.onclick = async () => {
+                    // Remove from DOM instantly
+                    slide.remove();
+                    updateCounter();
+                    // Then clean up on Supabase in background
+                    await supabase.storage.from(BUCKET).remove([`${files[i].folder}/${files[i].name}`]);
+                };
+                slide.appendChild(delBtn);
+            }
 
             track.appendChild(slide);
         }
@@ -211,27 +236,46 @@ const downloadBtn = document.getElementById('downloadBtn');
 const downloadStatus = document.getElementById('downloadStatus');
 
 downloadBtn.addEventListener('click', async () => {
-    if (!window.JSZip) { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r); }
+    if (!window.JSZip) {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        document.head.appendChild(s);
+        await new Promise(r => s.onload = r);
+    }
     downloadBtn.disabled = true;
     downloadStatus.style.display = 'block';
     downloadStatus.textContent = 'Gathering photos…';
 
     try {
-        const { data, error } = await supabase.storage.from(BUCKET).list('', { limit: 200 });
+        // List all folders and collect all files
+        const { data: folders, error } = await supabase.storage.from(BUCKET).list('', { limit: 200 });
         if (error) throw error;
-        const files = data.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
+
+        const allFiles = [];
+        for (const folder of folders) {
+            if (!folder.id) {
+                const { data: folderFiles } = await supabase.storage.from(BUCKET).list(folder.name, { limit: 200 });
+                if (folderFiles) {
+                    folderFiles.forEach(f => allFiles.push({ ...f, folder: folder.name }));
+                }
+            }
+        }
+
+        const files = allFiles.filter(f => f.name && f.name !== '.emptyFolderPlaceholder');
 
         const zip = new JSZip();
-        const folder = zip.folder('wedding-photos');
+        const zipFolder = zip.folder('wedding-photos');
 
         for (let i = 0; i < files.length; i++) {
             downloadStatus.textContent = `Packing ${i + 1} of ${files.length}…`;
             try {
-                const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(files[i].name);
+                const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(`${files[i].folder}/${files[i].name}`);
                 const resp = await fetch(urlData.publicUrl);
                 const buf = await resp.arrayBuffer();
-                folder.file(files[i].name, buf);
-            } catch (e) { console.warn('Skipped:', files[i].name, e); }
+                zipFolder.file(files[i].name, buf);
+            } catch (e) {
+                console.warn('Skipped:', files[i].name, e);
+            }
         }
 
         downloadStatus.textContent = 'Creating ZIP…';
@@ -244,7 +288,10 @@ downloadBtn.addEventListener('click', async () => {
 
         downloadStatus.textContent = '✓ Download started!';
         showToast('ZIP download started!');
-    } catch (e) { console.error(e); downloadStatus.textContent = 'Something went wrong.'; }
+    } catch (e) {
+        console.error(e);
+        downloadStatus.textContent = 'Something went wrong.';
+    }
 
     downloadBtn.disabled = false;
 });
@@ -256,27 +303,26 @@ let autoScrollInterval;
 function startAutoScroll() {
     autoScrollInterval = setInterval(() => {
         autoScrollCounter++;
-
-        // Only scroll after every 5 images
         if (autoScrollCounter >= 5) {
-            autoScrollCounter = 0; // reset
+            autoScrollCounter = 0;
             const max = Math.max(0, track.children.length - visibleCount);
             if (carouselOffset < max) {
                 carouselOffset++;
             } else {
-                carouselOffset = 0; // loop back to start if at end
+                carouselOffset = 0;
             }
             updateCarousel();
         }
-    }, 1000); // checks every 1 second, adjust if needed
+    }, 1000);
 }
 
 function stopAutoScroll() {
     clearInterval(autoScrollInterval);
 }
 
-// Start auto-scroll once the gallery loads
+// Start auto-scroll once the gallery loads, then refresh gallery every 9 seconds
 loadGallery().then(startAutoScroll);
+setInterval(loadGallery, 9000);
 
 // ────────────── TOAST ──────────────
 function showToast(msg) { toast.textContent = '✓ ' + msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 3000); }

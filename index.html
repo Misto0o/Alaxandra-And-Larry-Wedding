@@ -51,7 +51,7 @@
 
             <p class="hero-intro">
                 Today, two lives become one.
-                Thank you for being part of our love story.
+                Thank you for being part of the story.
                 Capture a memory and share the magic with us.
             </p>
 
@@ -65,14 +65,14 @@
             <div class="container">
                 <h2 class="section-title">Share a Memory</h2>
                 <p class="section-subtitle">Upload your favourite shots from the day</p>
-
-                <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <center>
+                <label class="upload-zone" id="dropZone">
                     <div class="upload-icon">📷</div>
                     <p><strong style="color:var(--gold)">Tap to choose photos</strong><br>or drag &amp; drop here</p>
                     <p style="font-size:.75rem;margin-top:.5rem;opacity:.6">JPG, PNG, HEIC • multiple files ok</p>
-                </div>
-                <input type="file" id="fileInput" accept="image/*" multiple>
-
+                    <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+                </label>
+                </center>
                 <div style="text-align:center;">
                     <button class="btn btn-gold" id="uploadBtn" style="display:none">Upload Photos</button>
                 </div>

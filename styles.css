@@ -326,7 +326,7 @@ body {
 }
 
 #fileInput {
-    display: none;
+    display: block;
 }
 
 .btn-gold {
@@ -404,6 +404,34 @@ body {
     overflow: hidden;
     background: #ddd;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
+}
+
+.sushi-slide {
+    position: relative;
+}
+
+.sushi-slide button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity .2s;
+    line-height: 1;
+}
+
+.sushi-slide:hover button {
+    opacity: 1;
 }
 
 .sushi-slide img {
