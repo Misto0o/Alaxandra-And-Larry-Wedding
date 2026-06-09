@@ -320,8 +320,8 @@ function stopAutoScroll() {
     clearInterval(autoScrollInterval);
 }
 
-// Start auto-scroll once the gallery loads, then refresh gallery every 9 seconds
-loadGallery().then(startAutoScroll);
+// Load gallery once, then refresh gallery every 9 seconds
+loadGallery();
 setInterval(loadGallery, 9000);
 
 // ────────────── TOAST ──────────────
