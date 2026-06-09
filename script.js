@@ -320,9 +320,9 @@ function stopAutoScroll() {
     clearInterval(autoScrollInterval);
 }
 
-// Load gallery once, then refresh gallery every 9 seconds
+// Load gallery once, then refresh gallery every 10 Minutes to catch new uploads from other users (if any)
 loadGallery();
-setInterval(loadGallery, 9000);
+setInterval(loadGallery, 600000);
 
 // ────────────── TOAST ──────────────
 function showToast(msg) { toast.textContent = '✓ ' + msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 3000); }
